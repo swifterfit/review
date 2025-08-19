@@ -13,7 +13,7 @@ swift 相关面试题
     如果需要继承、需要引用语义（多个变量指向同一个实例）、需要在类之间共享状态，推荐使用 class。比如：视图控制器(ViewController)、自定义视图(View)、管理器(Manager)等。
     总结：
     - 优先使用 struct，只有在需要引用语义或继承时才使用 class。
-    
+
 3. struct 是线程安全么？
 
     struct 本身并不保证线程安全。虽然 struct 是值类型，赋值和传递时会进行值拷贝，但如果多个线程同时访问同一个 struct 实例（比如通过 inout 参数、全局变量、静态变量或引用类型中嵌套 struct），依然可能发生数据竞争和线程安全问题。
@@ -23,6 +23,33 @@ swift 相关面试题
     总结：
     - struct 的值语义有助于减少线程安全问题，但不能完全避免。
     - 只要有并发访问同一个实例的可能，就需要考虑线程安全措施。
+
+4. struct 可以继承么？
+
+    struct 不能继承其他 struct 或 class。也就是说，struct 之间没有继承关系，不能像 class 那样通过继承来扩展功能或重用代码。
+
+    但是，struct 可以遵循（conform）协议（protocol），通过协议扩展功能。这是 Swift 推荐的代码复用和功能扩展方式。
+
+    总结：
+    - struct 不能继承，只能遵循协议。
+    - 如果需要继承机制，应该使用 class。
+
+    示例：
+
+    ```swift
+    protocol Drawable {
+        func draw()
+    }
+
+    struct Circle: Drawable {
+        func draw() {
+            print("Draw a circle")
+        }
+    }
+    ```
+
+
+
 
 
 
