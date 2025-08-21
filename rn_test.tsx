@@ -51,5 +51,24 @@ const FlatListBasic = () => {
         </>
     );
 }
+
+const Greeting =（props) => {
+    return (
+        <View>
+            <Text>Hello, {props.name}!</Text>
+        </View>
+    )
+}
+
+export default LotsOfGreetings = () => {
+    return (
+        <View style={{alignItems: 'center', top: 50}}>
+            <Greeting name="Rexxar" />
+            <Greeting name="Jaina" />
+            <Greeting name="Valeera" />
+        </View>
+    )
+}
+
 export default FlatListBasic;
 
