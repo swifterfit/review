@@ -70,7 +70,5 @@ export default LotsOfGreetings = () => {
         </View>
     )
 }
-
-
 export default FlatListBasic;
 
