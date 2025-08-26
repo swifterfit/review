@@ -1,0 +1,128 @@
+### 概念总览
+
+- **UIView 与 CALayer**
+
+  - UIView 负责事件、响应链、自动布局、手势；每个 UIView 底层都有一个 `CALayer` 承载显示。
+  - 真正被渲染的是 CALayer，动画也由 Core Animation 对 CALayer 属性做插值。
+
+- **三棵树（面试高频）**
+  - **Model Tree（模型层树）**：开发者直接读写的 layer 树。你设置的 `frame/position/opacity` 等都先落在这里，值通常是“最终态”。
+  - **Presentation Tree（展示层树）**：渲染时刻的“当前态”快照。动画过程中，它的属性每帧在变，代表屏幕上看到的真实位置/透明度等。通过 `layer.presentation()` 访问，只读。
+  - **Render Tree**：更底层的渲染管线数据结构（不可直接访问）。
+
+### 模型层 vs 展示层
+
+- **模型层（Model Layer）**
+
+  - 定义：开发者设置的目标状态；提交事务后用于“生成动画从当前值到目标值”的依据。
+  - 特点：动画中它通常已经是“终点值”；直接读 `view.frame/layer.position` 会拿到终点，而不是中间帧。
+  - 场景：布局计算、数据状态保存、动画配置。
+
+- **展示层（Presentation Layer）**
+  - 定义：当前帧正在显示的中间状态，渲染每帧更新一次。
+  - 特点：只读；动画结束自动释放；可用来做“与视觉一致”的命中测试、碰撞检测、进度同步等。
+  - 访问：`view.layer.presentation()?.<property>`，如 `frame/position/transform`。
+
+### 动画是如何“跑”的
+
+- `UIView.animate`/`UIViewPropertyAnimator`/直接改 `layer` 属性，实质都是：
+
+  1. 你把模型层属性改到“终点值”；
+  2. Core Animation 生成从“当前显示值（展示层）”到“终点值（模型层）”的插值动画；
+  3. 每帧渲染时，展示层属性被更新，屏幕看到运动；模型层保持终点不变。
+
+- 这就是“读取 `frame` 拿到的是终点，但屏幕在中间”的根因。
+
+### 命中测试与手势的影响（你遇到的问题）
+
+- UIKit 命中测试大致两跳：
+  - 跳 1（Window → 某个正在动的父 view）：会参考展示层，父 view 往往能点到。
+  - 跳 2（父 view → 子 view）：继续下钻时常用“子视图的模型层几何”，动画中与展示层不一致，容易“点不中”子视图上手势。
+- 解决思路（两类）：
+  - A：手势挂在父 view，重写 `point(inside:)`/`hitTest`，用子视图的展示层 `presentation().frame` 做命中过滤（你已采用）。
+  - B：让模型层和视觉同步：用 `CADisplayLink`/`fractionComplete` 每帧推进，并同步设置 `frame/position`；或用 `layer.speed/timeOffset` 驱动时间。
+
+### 何时必须用展示层
+
+- **拖拽/手势与动画并行**：例如边拖边播放动画，需要读取实时位置，使用 `layer.presentation()`。
+- **碰撞检测/物理效果**：基于屏幕真实位置，而不是终点值。
+- **命中测试修正**：如本次在 `point(inside:)` 使用 `presentation().frame`。
+- **可视化调试**：验证动画中间状态。
+
+### 常见坑与最佳实践
+
+- **坑：动画中读 `frame` 不准**
+
+  - 现象：读到终点；布局/命中错位。
+  - 规避：用 `layer.presentation()?.frame` 或在需要时用 displayLink 同步模型层。
+
+- **坑：`transform` 参与时 `frame` 不可靠**
+
+  - 旋转/缩放会让 `frame` 只是包围盒，形状不同。需用 `convert(_:to:)` 或 `UIBezierPath` 命中，或用 layer 的 `hitTest(_:)`。
+
+- **坑：自动布局动画误用**
+
+  - 用约束动画时应在 `UIView.animate` 里修改约束值并调用 `layoutIfNeeded()`，不要混搭直接改 `frame`。
+
+- **坑：隐式动画**
+
+  - 直接改 `layer` 某些属性会产生隐式动画。需要关闭可用：
+    ```swift
+    CATransaction.begin()
+    CATransaction.setDisableActions(true)
+    layer.position = p
+    CATransaction.commit()
+    ```
+
+- **坑：读取展示层坐标的坐标系问题**
+  - 展示层的 `frame/position` 是相对其父 layer；跨层级判断需用 `view.convert(_:to:)`/`layer.convert(_:to:)` 转换。
+
+### 面试可用要点（速记）
+
+- **三树**：Model（你改）/Presentation（你看）/Render（系统画）。
+- **差异**：动画期间，Model=终点，Presentation=中间帧。
+- **读取实时位置**：`layer.presentation()?.frame/position/transform`。
+- **命中测试异常**：父用展示层，子常用模型层，导致“子控件点不到”，用方案 A 或方案 B 修正。
+- **同步办法**：`CADisplayLink` 推进 `fractionComplete` 同步模型层，或 `layer.speed=0 + timeOffset`。
+- **Auto Layout 动画**：改约束 + `layoutIfNeeded()`；避免与直接 `frame` 动画混用。
+- **调试**：打印 `frame` 与 `presentation()?.frame` 对比，能快速定位“视图看起来动、但 frame 没动”的问题。
+
+### 小代码片段（命中修正与进度驱动）
+
+- 命中修正（你项目里已用）
+
+```swift
+override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {
+    guard isUserInteractionEnabled, !isHidden, alpha > 0.01 else { return false }
+    guard !stackView.isHidden else { return false }
+
+    // self 展示层偏移修正
+    let pres = layer.presentation()?.frame ?? frame
+    let dx = frame.minX - pres.minX
+    let dy = frame.minY - pres.minY
+    let corrected = CGPoint(x: point.x + dx, y: point.y + dy)
+
+    // 子视图用展示层 frame
+    let stackPresFrame = stackView.layer.presentation()?.frame ?? stackView.frame
+    let rectInSelf = bgImageView.convert(stackPresFrame, to: self)
+    return rectInSelf.contains(corrected)
+}
+```
+
+- 进度驱动（当需要模型层与视觉完全一致）
+
+```swift
+animator.pauseAnimation()
+var last: CFTimeInterval = 0
+let link = CADisplayLink(target: Proxy { l in
+    if last == 0 { last = l.timestamp; return }
+    let dt = l.timestamp - last; last = l.timestamp
+    let delta = speed * dt / totalDistance
+    animator.fractionComplete = min(1, animator.fractionComplete + delta)
+    view.frame.origin.x = startX + (endX - startX) * CGFloat(animator.fractionComplete)
+    if animator.fractionComplete >= 1 { l.invalidate() }
+}, selector: #selector(Proxy.tick(_:)))
+link.add(to: .main, forMode: .common)
+```
+
+这份要点基本覆盖“模型层/展示层/动画/命中测试”的常见考点与实战坑点，你可以直接当面试复习材料使用。需要我整理成一页 PDF/Markdown 清单也可以。
