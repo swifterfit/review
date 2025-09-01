@@ -13,7 +13,7 @@ public class TreeNode {
 
 class Solution {
     func checkTree(_ root: TreeNode?) -> Bool {
-        guard let root = root else { return true }
-        return root.val == root.left?.val + root.right?.val
+        guard let root = root else { return false }
+        return root.val == (root.left?.val ?? 0) + (root.right?.val ?? 0)
     }
 }
