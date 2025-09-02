@@ -11,6 +11,7 @@ public class TreeNode {
     }
 }
 
+
 class Solution {
     func checkTree(_ root: TreeNode?) -> Bool {
         guard let root = root else { return false }
