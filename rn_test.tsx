@@ -19,7 +19,6 @@ const styles = StyleSheet.create({
     },
 });
 
-
 const FlatListBasic = () => {
     return (
         <>
