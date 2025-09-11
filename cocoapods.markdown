@@ -22,4 +22,4 @@
 
 - 首次安装和日常使用时用 `pod install`
 - 需要更新特定 pod 版本时用 `pod update [PODNAME]`
-- 将 Podfile.lock 文件提交到版本控制,保证团队使用相同版本
+- 将 Podfile.lock 文件提交到版本控制,保证团队使用同版本
